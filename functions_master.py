@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import scipy.stats
+from scipy.optimize import minimize
 
 def get_returns_per_company (company_id, df_name):
     """
@@ -116,7 +117,8 @@ def get_stats_per_company (df, company_id, metric, start_date = '', end_date = '
         median = round(df[metric].median(), 3)  
         skew = round(scipy.stats.skew(df[metric]), 3)
         kurtosis = round(scipy.stats.kurtosis(df[metric]), 3)    
-        volatility = round(df[metric].std(), 3)
+        volatility = round(df[metric].std(ddof=0), 3)
+        semideviation = round(df[metric][df[metric]<0].std(ddof=0), 3)
         annualized_volatility = round(volatility*np.sqrt(12), 3)
         return_per_month = round((df[metric]+1).prod()**(1/months_in_period) - 1, 3)
         annualized_return = round((return_per_month+1)**12 - 1, 3)
@@ -132,6 +134,7 @@ def get_stats_per_company (df, company_id, metric, start_date = '', end_date = '
                  "Skew" : skew,
                  "Kurtosis" : kurtosis,
                  "Volatility" : volatility,
+                 "Semideviation" : semideviation,
                  "AnnualizedVolatility" : annualized_volatility,
                  "ReturnPerMonth" : return_per_month,
                  "AnnualizedReturn" : annualized_return
@@ -147,7 +150,7 @@ def get_stats (input_df, metric, start_date = '', end_date = ''):
     """
     companies = input_df['CompanyId'].unique()
     
-    stats = pd.DataFrame(columns = ['CompanyId', 'CompanyName', 'PeriodStart', 'PeriodEnd', 'MonthsInPeriod', 'Mean', 'Median', 'Skew', 'Kurtosis', 'Volatility', 'AnnualizedVolatility', 'ReturnPerMonth', 'AnnualizedReturn'])
+    stats = pd.DataFrame(columns = ['CompanyId', 'CompanyName', 'PeriodStart', 'PeriodEnd', 'MonthsInPeriod', 'Mean', 'Median', 'Skew', 'Kurtosis', 'Volatility', 'Semideviation', 'AnnualizedVolatility', 'ReturnPerMonth', 'AnnualizedReturn'])
     
     for company in companies:
     
@@ -177,3 +180,80 @@ def compare_returns (companies, input_df, metric, start_date, end_date):
     output_df = output_df.dropna()
     
     return output_df
+    
+    
+def portfolio_return(weights, returns):
+    """
+    Computes the return on a portfolio from constituent returns and weights
+    weights are a numpy array or Nx1 matrix and returns are a numpy array or Nx1 matrix
+    """
+    return weights.T @ returns
+    
+    
+def portfolio_vol(weights, covmat):
+    """
+    Computes the vol of a portfolio from a covariance matrix and constituent weights
+    weights are a numpy array or N x 1 maxtrix and covmat is an N x N matrix
+    """
+    return (weights.T @ covmat @ weights)**0.5
+    
+    
+def minimize_vol(target_return, er, cov):
+    """
+    Returns the optimal weights that achieve the target return
+    given a set of expected returns and a covariance matrix
+    """
+    n = er.shape[0]
+    init_guess = np.repeat(1/n, n)
+    bounds = ((0.0, 1.0),) * n # an N-tuple of 2-tuples!
+    # construct the constraints
+    weights_sum_to_1 = {'type': 'eq',
+                        'fun': lambda weights: np.sum(weights) - 1
+    }
+    return_is_target = {'type': 'eq',
+                        'args': (er,),
+                        'fun': lambda weights, er: target_return - portfolio_return(weights,er)
+    }
+    weights = minimize(portfolio_vol, init_guess,
+                       args=(cov,), method='SLSQP',
+                       options={'disp': False},
+                       constraints=(weights_sum_to_1,return_is_target),
+                       bounds=bounds)
+    return weights.x
+
+
+def optimal_weights(n_points, er, cov):
+    """
+    """
+    target_rs = np.linspace(er.min(), er.max(), n_points)
+    weights = [minimize_vol(target_return, er, cov) for target_return in target_rs]
+    return weights   
+  
+  
+def plot_ef(n_points, er, cov):
+    """
+    Plots the multi-asset efficient frontier
+    """
+    weights = optimal_weights(n_points, er, cov)
+    rets = [portfolio_return(w, er) for w in weights]
+    vols = [portfolio_vol(w, cov) for w in weights]
+    ef = pd.DataFrame({
+        "Returns": rets, 
+        "Volatility": vols
+    })
+    return ef.plot.line(x="Volatility", y="Returns", style='.-', legend=False, figsize=(20, 10))
+    
+    
+def get_portfolio_details(n_points, er, cov):
+    """
+    Plots the multi-asset efficient frontier
+    """
+    weights = optimal_weights(n_points, er, cov)
+    rets = [portfolio_return(w, er) for w in weights]
+    vols = [portfolio_vol(w, cov) for w in weights]
+    ef = pd.DataFrame({
+        "Returns": rets, 
+        "Volatility": vols,
+        "Weights": weights
+    })
+    return ef
