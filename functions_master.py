@@ -2,6 +2,10 @@ import pandas as pd
 import numpy as np
 import scipy.stats
 from scipy.optimize import minimize
+from scipy.stats import norm
+import matplotlib.pyplot as plt
+import statistics
+import datetime as dt
 
 def get_returns_per_company (company_id, df_name):
     """
@@ -228,32 +232,120 @@ def optimal_weights(n_points, er, cov):
     target_rs = np.linspace(er.min(), er.max(), n_points)
     weights = [minimize_vol(target_return, er, cov) for target_return in target_rs]
     return weights   
+
+
+
+def get_msr(riskfree_rate, er, cov):
+    """
+    Returns the weights of the portfolio that gives you the maximum sharpe ratio
+    given the riskfree rate and expected returns and a covariance matrix
+    """
+    n = er.shape[0]
+    init_guess = np.repeat(1/n, n)
+    bounds = ((0.0, 1.0),) * n # an N-tuple of 2-tuples!
+    # construct the constraints
+    weights_sum_to_1 = {'type': 'eq',
+                        'fun': lambda weights: np.sum(weights) - 1
+    }
+    def neg_sharpe(weights, riskfree_rate, er, cov):
+        """
+        Returns the negative of the sharpe ratio
+        of the given portfolio
+        """
+        r = portfolio_return(weights, er)
+        vol = portfolio_vol(weights, cov)
+        return -(r - riskfree_rate)/vol
+    
+    weights = minimize(neg_sharpe, init_guess,
+                       args=(riskfree_rate, er, cov), method='SLSQP',
+                       options={'disp': False},
+                       constraints=(weights_sum_to_1,),
+                       bounds=bounds)
+    return weights.x
   
   
-def plot_ef(n_points, er, cov):
+def get_gmv (portfolios_df, output_format):
+    
+    top_portfolio = portfolios_df[portfolios_df['Volatility'] == min(portfolios_df['Volatility'])]
+    top_portfolio = top_portfolio[top_portfolio['Returns'] == max(top_portfolio['Returns'])]
+    
+    if output_format == "dataframe":
+        return top_portfolio
+    
+    elif output_format == "piechart":
+        columns = top_portfolio.columns.tolist()
+        columns.remove('Volatility')
+        columns.remove('Returns')
+        
+        portfolio_volatility = top_portfolio['Volatility'].iloc[0]
+        portfolio_return = top_portfolio['Returns'].iloc[0]
+        
+        split = top_portfolio[columns].T
+        split.columns = ['Portfolio Split']
+        return split.plot.pie(y='Portfolio Split', title='Portfolio volatility: ' + str(portfolio_volatility) + ' | Portfolio return: ' + str(portfolio_return), figsize=(10, 10)).legend(bbox_to_anchor=(0.95, 0.85))
+  
+  
+def get_portfolio_details(n_points, er, cov, riskfree_rate, output_format="plot", show_cml=False, show_ew=False, show_gmv=False):
     """
     Plots the multi-asset efficient frontier
     """
     weights = optimal_weights(n_points, er, cov)
     rets = [portfolio_return(w, er) for w in weights]
     vols = [portfolio_vol(w, cov) for w in weights]
-    ef = pd.DataFrame({
-        "Returns": rets, 
-        "Volatility": vols
-    })
-    return ef.plot.line(x="Volatility", y="Returns", style='.-', legend=False, figsize=(20, 10))
     
-    
-def get_portfolio_details(n_points, er, cov):
-    """
-    Plots the multi-asset efficient frontier
-    """
-    weights = optimal_weights(n_points, er, cov)
-    rets = [portfolio_return(w, er) for w in weights]
-    vols = [portfolio_vol(w, cov) for w in weights]
-    ef = pd.DataFrame({
+    df_output = pd.DataFrame({
         "Returns": rets, 
         "Volatility": vols,
         "Weights": weights
-    })
-    return ef
+        })
+    
+    df_weights = pd.DataFrame(df_output['Weights'].to_list(), columns = cov.columns.tolist())
+    df_output = pd.concat([df_output, df_weights], axis=1) 
+    df_output = df_output.drop('Weights', axis=1)
+    df_output = df_output.round(decimals = 3)
+    df_output.columns = ['Returns', 'Volatility'] + cov.columns.tolist()
+    
+    if output_format == "plot":    
+        df = pd.DataFrame({
+            "Returns": rets,    
+            "Volatility": vols
+        })
+        ax = df.plot.line(x="Volatility", y="Returns", style='.-', legend=False, figsize=(20, 10))
+        
+        if show_cml:
+            ax.set_xlim(left = 0)
+            # get MSR
+            w_msr = get_msr(riskfree_rate, er, cov)
+            r_msr = portfolio_return(w_msr, er)
+            vol_msr = portfolio_vol(w_msr, cov)
+            # add CML
+            cml_x = [0, vol_msr]
+            cml_y = [riskfree_rate, r_msr]
+            ax.plot(cml_x, cml_y, color='green', marker='o', linestyle='dashed', linewidth=2, markersize=10, label='Capital Market Line')
+            
+            xmean = sum(i for i in cml_x) / float(len(cml_x))
+            ymean = sum(i for i in cml_y) / float(len(cml_y))
+            
+            ax.annotate('Capital Market Line', xy=(xmean,ymean), xycoords='data', ha="center")
+            
+        if show_ew:
+            n = er.shape[0]
+            w_ew = np.repeat(1/n, n)
+            r_ew = portfolio_return(w_ew, er)
+            vol_ew = portfolio_vol(w_ew, cov)
+            # add EW
+            ax.plot([vol_ew], [r_ew], color='goldenrod', marker='o', markersize=10)
+            ax.text(vol_ew, r_ew, 'Volatility: ' + str(round(vol_ew, 3)) + '; Return: ' + str(round(r_ew, 3)) + ' (Equal Weight)')
+            
+        if show_gmv:          
+            gmv = get_gmv (df_output, output_format="dataframe")
+            vol_gmv = gmv['Volatility'].iloc[0]
+            r_gmv = gmv['Returns'].iloc[0]
+            # add EW
+            ax.plot([vol_gmv], [r_gmv], color='midnightblue', marker='o', markersize=10)
+            ax.text(vol_gmv, r_gmv, 'Volatility: ' + str(round(vol_gmv, 3)) + '; Return: ' + str(round(r_gmv, 3)) + ' (Global Minimum Volatility)')
+            
+        return ax
+        
+    elif output_format == "dataframe":
+        return df_output
