@@ -85,7 +85,18 @@ def get_returns (dataframe):
         returns = pd.concat([returns, df])
     
     return returns
-    
+
+
+def annualize_rets(r, periods_per_year):
+    """
+    Annualizes a set of returns
+    We should infer the periods per year
+    but that is currently left as an exercise
+    to the reader :-)
+    """
+    compounded_growth = (1+r).prod()
+    n_periods = r.shape[0]
+    return compounded_growth**(periods_per_year/n_periods)-1   
     
     
 def get_stats_per_company (df, company_id, metric, start_date = '', end_date = ''):
@@ -349,3 +360,77 @@ def get_portfolio_details(n_points, er, cov, riskfree_rate, output_format="plot"
         
     elif output_format == "dataframe":
         return df_output
+    
+
+def get_portfolio_columns (portfolio_df):
+    columns = portfolio_df.columns.tolist()
+    columns.remove('Volatility')
+    columns.remove('Returns')
+    return columns
+    
+    
+def get_portfolio_weights (portfolio_df):
+    columns = portfolio_df.columns.tolist()
+    columns.remove('Volatility')
+    columns.remove('Returns')
+    weights = portfolio_df[columns].values.tolist()[0]
+    return weights
+    
+    
+def plot_portfolio_value (portfolio_df, returns, returns_type="weighed", rolling_window=31):
+
+    columns = get_portfolio_columns (portfolio_df)
+    weights = get_portfolio_weights (portfolio_df)
+    
+    weighed_returns = returns * weights
+    
+    if returns_type == "raw":
+        returns_df = returns
+    elif returns_type == "weighed":
+        returns_df = weighed_returns
+    elif returns_type == "total":
+        returns_df = weighed_returns.sum(axis=1)
+        
+    if returns_type == "raw" or returns_type == "weighed":
+        ax = get_drawdown (returns_df[columns[0]])['Wealth'].plot.line(figsize=(20, 10))
+        companies = columns[1:]
+        for i in companies:
+            get_drawdown (returns_df[i])['Wealth'].plot.line()
+        output = ax.legend(columns) 
+    elif returns_type == "total":
+        output = get_drawdown (returns_df)['Wealth'].plot.line(legend=True, label="Portfolio returns", figsize=(20, 10))
+        get_drawdown (returns_df)['Wealth'].rolling(window=rolling_window).mean().plot(legend=True, label="Portfolio returns - rolling average", figsize=(20, 10))
+        
+    return output
+    
+    
+def get_portfolio_returns (portfolio_df, returns, returns_type="weighed"):
+
+    columns = get_portfolio_columns (portfolio_df)
+    weights = get_portfolio_weights (portfolio_df)
+    
+    weighed_returns = returns * weights
+    
+    if returns_type == "raw":
+        returns_df = returns
+    elif returns_type == "weighed":
+        returns_df = weighed_returns
+    elif returns_type == "total":
+        returns_df = weighed_returns.sum(axis=1)
+        
+    return returns_df
+    
+    
+    
+def plot_portfolio_returns_and_correlations (portfolio_df, returns, rolling_window=30):
+    
+    total_portfolio_returns = get_portfolio_returns (portfolio_df, returns, returns_type="total")
+    raw_portfolio_returns = get_portfolio_returns (portfolio_df, returns, returns_type="raw")
+    
+    correlations = raw_portfolio_returns.rolling(window=rolling_window).corr().groupby(level='Date').apply(lambda cormat: cormat.values.mean())
+    returns = total_portfolio_returns.rolling(window=rolling_window).aggregate(annualize_rets, periods_per_year=12)
+    
+    ax = returns.plot(secondary_y=True, legend=True, label="Rolling average returns", figsize=(20, 10))
+    correlations.plot(legend=True, label="Rolling average correlations")
+    
+    return ax
