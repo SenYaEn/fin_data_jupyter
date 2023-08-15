@@ -8,7 +8,20 @@ import statistics
 import datetime as dt
 
 class ReturnsAnalyzer:
-    def __init__(self, dataframe, metric, start_date = '', end_date = ''):
+    def __init__(self, 
+                 dataframe,
+                 metric, 
+                 start_date = '', 
+                 end_date = ''):
+        """
+        Initializes a ReturnsAnalyzer instance.
+        
+        Parameters:
+        - dataframe: DataFrame containing asset price data for multiple companies.
+        - metric: The metric to analyze (e.g., 'Open', 'High', 'Close').
+        - start_date: Optional start date for data filtering.
+        - end_date: Optional end date for data filtering.
+        """
         self.dataframe = dataframe
         self.metric = metric
         self.start_date = start_date
@@ -58,6 +71,9 @@ class ReturnsAnalyzer:
         })
 
     def plot_wealth_peaks_drawdown (self, returns_df):
+        """
+        Plots wealth index, peaks, and drawdown for a returns DataFrame.
+        """
         if len(returns_df.shape) == 1:
             self.get_drawdown(returns_df)[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + returns_df.name)
             self.get_drawdown(returns_df)[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + returns_df.name)
@@ -201,7 +217,26 @@ class ReturnsAnalyzer:
             
             
 class PortfolioAnalyzer:
-    def __init__(self, returns_object, portfolio_size, n_points, riskfree_rate, show_cml=True, show_ew=True, show_gmv=True):
+    def __init__(self, 
+                 returns_object, 
+                 portfolio_size, 
+                 n_points, 
+                 riskfree_rate, 
+                 show_cml=True, 
+                 show_ew=True, 
+                 show_gmv=True):
+        """
+        Initializes a PortfolioAnalyzer instance.
+
+        Parameters:
+        - returns_object: An instance of the ReturnsAnalyzer class containing asset return data.
+        - portfolio_size: Number of top assets to consider in the portfolio.
+        - n_points: Number of points on the efficient frontier.
+        - riskfree_rate: Risk-free rate for calculating Sharpe ratio.
+        - show_cml: Whether to show Capital Market Line in plots.
+        - show_ew: Whether to show Equal Weight portfolio in plots.
+        - show_gmv: Whether to show Global Minimum Volatility portfolio in plots.
+        """
         self.returns_object = returns_object
         self.portfolio_size = portfolio_size
         self.n_points = n_points
@@ -252,6 +287,8 @@ class PortfolioAnalyzer:
 
     def optimal_weights(self):
         """
+        Generates optimal portfolio weights for various target returns.
+        Returns a list of optimal portfolio weights.
         """
         target_rs = np.linspace(self.annualized_rets.min(), self.annualized_rets.max(), self.n_points)
         weights = [self.minimize_vol(target_return) for target_return in target_rs]
@@ -286,7 +323,15 @@ class PortfolioAnalyzer:
         return weights.x
 
     def get_gmv (self, portfolios_df, gmv_output_format):
-        
+        """
+        Retrieves the portfolio details for the Global Minimum Volatility portfolio.
+
+        Parameters:
+        - portfolios_df: DataFrame containing portfolio details.
+        - gmv_output_format: Output format ("dataframe" or "piechart").
+
+        Returns either a DataFrame or a pie chart representation of the GMV portfolio.
+        """       
         top_portfolio = portfolios_df[portfolios_df['Volatility'] == min(portfolios_df['Volatility'])]
         top_portfolio = top_portfolio[top_portfolio['Returns'] == max(top_portfolio['Returns'])]
         
@@ -308,7 +353,12 @@ class PortfolioAnalyzer:
 
     def get_portfolio_details(self, output_format):
         """
-        Plots the multi-asset efficient frontier
+        Generates and plots the multi-asset efficient frontier.
+
+        Parameters:
+        - output_format: Output format ("plot" or "dataframe").
+
+        Returns either a plot or a DataFrame with efficient frontier details.
         """
         weights = self.optimal_weights()
         rets = [self.portfolio_return(w) for w in weights]
