@@ -55,7 +55,7 @@ class ReturnsAnalyzer:
         return returns_per_company
 
         
-    def get_drawdown (self, return_series):
+    def get_drawdown (return_series):
         """
         Takes a time series of asset returns and returns a 
         DataFrame with columns for the wealth index, 
@@ -75,17 +75,17 @@ class ReturnsAnalyzer:
         Plots wealth index, peaks, and drawdown for a returns DataFrame.
         """
         if len(returns_df.shape) == 1:
-            self.get_drawdown(returns_df)[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + returns_df.name)
-            self.get_drawdown(returns_df)[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + returns_df.name)
+            ReturnsAnalyzer.get_drawdown(returns_df)[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + returns_df.name)
+            ReturnsAnalyzer.get_drawdown(returns_df)[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + returns_df.name)
         else:
             columns = returns_df.columns.tolist()
             
-            self.get_drawdown(returns_df[columns[0]])[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + columns[0])
-            self.get_drawdown(returns_df[columns[0]])[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + columns[0])
+            ReturnsAnalyzer.get_drawdown(returns_df[columns[0]])[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + columns[0])
+            ReturnsAnalyzer.get_drawdown(returns_df[columns[0]])[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + columns[0])
             stocks = columns[1:]
             for i in stocks:
-                self.get_drawdown(returns_df[i])[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + i)
-                self.get_drawdown(returns_df[i])[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + i)
+                ReturnsAnalyzer.get_drawdown(returns_df[i])[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + i)
+                ReturnsAnalyzer.get_drawdown(returns_df[i])[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + i)
             
         
     def get_returns (self):
@@ -420,3 +420,234 @@ class PortfolioAnalyzer:
             
         elif output_format == "dataframe":
             return df_output
+            
+            
+class PortfolioOptimizer:
+    def __init__(self, 
+                 portfolios_object,
+                 portfolio_df):
+        """
+        Initializes a PortfolioOptimizer instance.
+
+        Parameters:
+        - portfolios_object: An instance of a portfolio-related class (e.g., PortfolioAnalyzer).
+        - portfolio_df: DataFrame containing portfolio details.
+        """
+        self.portfolios_object = portfolios_object
+        self.portfolio_df = portfolio_df
+        self.risky_returns = portfolios_object.risky_returns
+    
+    def get_portfolio_columns (self):
+        """
+        Extracts columns representing assets from the portfolio DataFrame.
+
+        Returns a list of asset columns.
+        """
+        columns = self.portfolio_df.columns.tolist()
+        try:
+            columns.remove('Volatility')
+        except: pass
+        try:
+            columns.remove('Returns')
+        except: pass
+        
+        return columns
+    
+    
+    def get_portfolio_weights (self):
+        """
+        Extracts portfolio weights from the portfolio DataFrame.
+
+        Returns a list of portfolio weights.
+        """
+        columns = self.portfolio_df.columns.tolist()
+        columns.remove('Volatility')
+        columns.remove('Returns')
+        weights = self.portfolio_df[columns].values.tolist()[0]
+        return weights
+        
+        
+    def plot_portfolio_value (self, returns_type, rolling_window=31):
+        """
+        Plots portfolio value over time based on returns type.
+
+        Parameters:
+        - returns_type: Type of returns to use ("raw", "weighed", "total").
+        - rolling_window: Rolling window size for calculations.
+
+        Returns the plot.
+        """
+        columns = self.get_portfolio_columns()
+        weights = self.get_portfolio_weights()
+        
+        weighed_returns = self.risky_returns * weights
+        
+        if returns_type == "raw":
+            returns_df = self.risky_returns
+        elif returns_type == "weighed":
+            returns_df = weighed_returns
+        elif returns_type == "total":
+            returns_df = weighed_returns.sum(axis=1)
+            
+        if returns_type == "raw" or returns_type == "weighed":
+            ax = ReturnsAnalyzer.get_drawdown (returns_df[columns[0]])['Wealth'].plot.line(figsize=(20, 10))
+            companies = columns[1:]
+            for i in companies:
+                ReturnsAnalyzer.get_drawdown (returns_df[i])['Wealth'].plot.line()
+            output = ax.legend(columns) 
+        elif returns_type == "total":
+            output = ReturnsAnalyzer.get_drawdown (returns_df)['Wealth'].plot.line(legend=True, label="Portfolio returns", figsize=(20, 10))
+            ReturnsAnalyzer.get_drawdown (returns_df)['Wealth'].rolling(window=rolling_window).mean().plot(legend=True, label="Portfolio returns - rolling average", figsize=(20, 10))
+            
+        return output
+
+    def annualize_rets(r, periods_per_year):
+        """
+        Annualizes a set of returns using a given number of periods per year.
+    
+        Parameters:
+        - r: Numpy array or pandas Series of returns.
+        - periods_per_year: Number of periods within a year (e.g., 12 for monthly data).
+    
+        Returns the annualized compound growth rate.
+        """
+        compounded_growth = (1+r).prod()
+        n_periods = r.shape[0]
+        return compounded_growth**(periods_per_year/n_periods)-1  
+
+    def get_portfolio_returns (self, returns_type):
+        """
+        Retrieves portfolio returns based on returns type.
+
+        Parameters:
+        - returns_type: Type of returns to use ("raw", "weighed", "total").
+
+        Returns the DataFrame of portfolio returns.
+        """
+        columns = self.get_portfolio_columns()
+        weights = self.get_portfolio_weights()
+        
+        weighed_returns = self.risky_returns * weights
+        
+        if returns_type == "raw":
+            returns_df = self.risky_returns
+        elif returns_type == "weighed":
+            returns_df = weighed_returns
+        elif returns_type == "total":
+            returns_df = weighed_returns.sum(axis=1)
+            
+        return returns_df
+       
+    def plot_portfolio_returns_and_correlations (self, rolling_window=30):
+        """
+        Plots portfolio returns and correlations over time.
+
+        Parameters:
+        - rolling_window: Rolling window size for calculations.
+
+        Returns the plot.
+        """
+        total_portfolio_returns = self.get_portfolio_returns (returns_type="total")
+        raw_portfolio_returns = self.get_portfolio_returns (returns_type="raw")
+        
+        correlations = raw_portfolio_returns.rolling(window=rolling_window).corr().groupby(level='Date').apply(lambda cormat: cormat.values.mean())
+        returns = total_portfolio_returns.rolling(window=rolling_window).aggregate(PortfolioOptimizer.annualize_rets, periods_per_year=12)
+        
+        ax = returns.plot(secondary_y=True, legend=True, label="Rolling average returns", figsize=(20, 10))
+        correlations.plot(legend=True, label="Rolling average correlations")
+        
+        return ax
+        
+    def run_cppi(risky_r, safe_r, m, start, floor, riskfree_rate, drawdown):
+        """
+        Runs a backtest of the CPPI strategy.
+
+        Parameters:
+        - risky_r: DataFrame or Series of returns for the risky asset.
+        - safe_r: DataFrame or Series of returns for the safe asset.
+        - m: Multiplier for cushion to risky allocation.
+        - start: Initial investment amount.
+        - floor: Floor value for cushion calculation.
+        - riskfree_rate: Risk-free rate for safe asset.
+        - drawdown: Maximum allowable drawdown.
+
+        Returns a dictionary containing various backtest results.
+        """
+        # set up the CPPI parameters
+        dates = risky_r.index
+        n_steps = len(dates)
+        account_value = start
+        floor_value = start*floor
+        peak = account_value
+        if isinstance(risky_r, pd.Series): 
+            risky_r = pd.DataFrame(risky_r, columns=["R"])
+    
+        if safe_r is None:
+            safe_r = pd.DataFrame().reindex_like(risky_r)
+            safe_r.values[:] = riskfree_rate/12 # fast way to set all values to a number
+        # set up some DataFrames for saving intermediate values
+        account_history = pd.DataFrame().reindex_like(risky_r)
+        risky_w_history = pd.DataFrame().reindex_like(risky_r)
+        cushion_history = pd.DataFrame().reindex_like(risky_r)
+        floorval_history = pd.DataFrame().reindex_like(risky_r)
+        peak_history = pd.DataFrame().reindex_like(risky_r)
+    
+        for step in range(n_steps):
+            if drawdown is not None:
+                peak = np.maximum(peak, account_value)
+                floor_value = peak*(1-drawdown)
+            cushion = (account_value - floor_value)/account_value
+            risky_w = m*cushion
+            risky_w = np.minimum(risky_w, 1)
+            risky_w = np.maximum(risky_w, 0)
+            safe_w = 1-risky_w
+            risky_alloc = account_value*risky_w
+            safe_alloc = account_value*safe_w
+            # recompute the new account value at the end of this step
+            account_value = risky_alloc*(1+risky_r.iloc[step]) + safe_alloc*(1+safe_r.iloc[step])
+            # save the histories for analysis and plotting
+            cushion_history.iloc[step] = cushion
+            risky_w_history.iloc[step] = risky_w
+            account_history.iloc[step] = account_value
+            floorval_history.iloc[step] = floor_value
+            peak_history.iloc[step] = peak
+        risky_wealth = start*(1+risky_r).cumprod()
+        backtest_result = {
+            "Wealth": account_history,
+            "Risky Wealth": risky_wealth, 
+            "Risk Budget": cushion_history,
+            "Risky Allocation": risky_w_history,
+            "m": m,
+            "start": start,
+            "floor": floor,
+            "risky_r":risky_r,
+            "safe_r": safe_r,
+            "drawdown": drawdown,
+            "peak": peak_history,
+            "floor": floorval_history
+        }
+        return backtest_result
+        
+        
+    def plot_cppi_wealth (self, returns_type, safe_returns, m, start, floor, riskfree_rate, drawdown):
+        """
+        Plots CPPI wealth over time.
+
+        Parameters:
+        - returns_type: Type of returns to use ("raw", "weighed", "total").
+        - safe_returns: DataFrame or Series of returns for the safe asset.
+        - m: Multiplier for cushion to risky allocation.
+        - start: Initial investment amount.
+        - floor: Floor value for cushion calculation.
+        - riskfree_rate: Risk-free rate for safe asset.
+        - drawdown: Maximum allowable drawdown.
+
+        Returns the plot.
+        """
+        returns = self.get_portfolio_returns (returns_type)
+        
+        output = PortfolioOptimizer.run_cppi(risky_r=returns,safe_r=safe_returns, m=m, start=start, floor=floor, riskfree_rate=riskfree_rate, drawdown=drawdown)
+        ax = output['Wealth'].rename(columns={'R': 'Wealth'}).plot(figsize=(20, 10), legend=True)
+        output['Risky Wealth'].rename(columns={'R': 'Risky Wealth'}).plot(ax=ax, style="k--", figsize=(20, 10), legend=True)
+        
+        return ax
