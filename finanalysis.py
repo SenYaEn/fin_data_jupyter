@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import statistics
 import datetime as dt
 
-class ReturnsAnalyzer:
+class ReturnsAnalyzer():
     def __init__(self, 
                  dataframe,
                  metric, 
@@ -54,8 +54,7 @@ class ReturnsAnalyzer:
         
         return returns_per_company
 
-        
-    def get_drawdown (return_series):
+    def get_drawdown (self, return_series):
         """
         Takes a time series of asset returns and returns a 
         DataFrame with columns for the wealth index, 
@@ -75,17 +74,17 @@ class ReturnsAnalyzer:
         Plots wealth index, peaks, and drawdown for a returns DataFrame.
         """
         if len(returns_df.shape) == 1:
-            ReturnsAnalyzer.get_drawdown(returns_df)[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + returns_df.name)
-            ReturnsAnalyzer.get_drawdown(returns_df)[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + returns_df.name)
+            self.get_drawdown(returns_df)[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + returns_df.name)
+            self.get_drawdown(returns_df)[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + returns_df.name)
         else:
             columns = returns_df.columns.tolist()
             
-            ReturnsAnalyzer.get_drawdown(returns_df[columns[0]])[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + columns[0])
-            ReturnsAnalyzer.get_drawdown(returns_df[columns[0]])[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + columns[0])
+            self.get_drawdown(returns_df[columns[0]])[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + columns[0])
+            self.get_drawdown(returns_df[columns[0]])[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + columns[0])
             stocks = columns[1:]
             for i in stocks:
-                ReturnsAnalyzer.get_drawdown(returns_df[i])[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + i)
-                ReturnsAnalyzer.get_drawdown(returns_df[i])[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + i)
+                self.get_drawdown(returns_df[i])[['Wealth', 'Peaks']].plot(figsize=(15, 4), title='Wealth & Peaks: ' + i)
+                self.get_drawdown(returns_df[i])[['Drawdown']].plot(figsize=(15, 4), title='Drawdown: ' + i)
             
         
     def get_returns (self):
@@ -422,7 +421,7 @@ class PortfolioAnalyzer:
             return df_output
             
             
-class PortfolioOptimizer:
+class PortfolioOptimizer(ReturnsAnalyzer):
     def __init__(self, 
                  portfolios_object,
                  portfolio_df):
@@ -490,14 +489,14 @@ class PortfolioOptimizer:
             returns_df = weighed_returns.sum(axis=1)
             
         if returns_type == "raw" or returns_type == "weighed":
-            ax = ReturnsAnalyzer.get_drawdown (returns_df[columns[0]])['Wealth'].plot.line(figsize=(20, 10))
+            ax = super().get_drawdown (returns_df[columns[0]])['Wealth'].plot.line(figsize=(20, 10))
             companies = columns[1:]
             for i in companies:
-                ReturnsAnalyzer.get_drawdown (returns_df[i])['Wealth'].plot.line()
+                super().get_drawdown (returns_df[i])['Wealth'].plot.line()
             output = ax.legend(columns) 
         elif returns_type == "total":
-            output = ReturnsAnalyzer.get_drawdown (returns_df)['Wealth'].plot.line(legend=True, label="Portfolio returns", figsize=(20, 10))
-            ReturnsAnalyzer.get_drawdown (returns_df)['Wealth'].rolling(window=rolling_window).mean().plot(legend=True, label="Portfolio returns - rolling average", figsize=(20, 10))
+            output = super().get_drawdown (returns_df)['Wealth'].plot.line(legend=True, label="Portfolio returns", figsize=(20, 10))
+            super().get_drawdown (returns_df)['Wealth'].rolling(window=rolling_window).mean().plot(legend=True, label="Portfolio returns - rolling average", figsize=(20, 10))
             
         return output
 
